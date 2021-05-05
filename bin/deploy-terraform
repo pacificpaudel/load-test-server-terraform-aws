@@ -1,0 +1,90 @@
+#!/bin/bash
+
+set -e
+
+AWS_ACCOUNT=241157558135
+AWS_REGION=eu-west-1
+TERRAFORM_VERSION=0.12.29
+
+if [ $# -lt 2 ]; then
+    echo "Usage: $0 ENVIRONMENT COMMAND [TARGET(S)] [TAG]"
+    echo "  ENVIRONMENT: loadtest"
+    echo "  COMMAND: plan | apply"
+    echo "  TARGET(S): optional resource targets as a comma separated list, syntax \"resource_type.resource_name,resource_type.resource_name2 etc.\""
+    echo "  TAG: optional custom tag for docker image, default same as 'git rev-parse HEAD'. Note, must pass \"\" for targets"
+    exit 1
+fi
+
+ENVIRONMENT=$1
+COMMAND=$2
+TARGETS=$3
+
+# Workaround for Terraform issue
+# https://github.com/terraform-providers/terraform-provider-aws/issues/1043
+export AWS_DEFAULT_REGION=$AWS_REGION
+
+if [ -z "$4" ]; then
+    TAG=$(git rev-parse HEAD)
+    if [ -z "$TAG" ]; then
+        echo "No Git revision found"
+        exit 1
+    fi
+else
+    TAG=$4
+fi
+
+if [ ! -d "$ENVIRONMENT" ]; then
+    echo "Invalid environment: must be (loadtest) or an existing Terraform directory"
+    exit 1
+fi
+
+if [ "$COMMAND" != "plan" ] && [ "$COMMAND" != "apply" ]; then
+    echo "Valid commands: plan | apply"
+    exit 1
+fi
+
+if [ "$(terraform-11-13 --version | head -n1)" != "Terraform v${TERRAFORM_VERSION}" ]; then
+    echo Invalid Terraform version installed. Required version: ${TERRAFORM_VERSION}
+    exit 1
+fi
+
+if [ "$COMMAND" = "apply" ]; then
+    TERRAFORM_AUTO_APPROVE="-auto-approve"
+else
+    TERRAFORM_AUTO_APPROVE=""
+fi
+
+# Run Terraform
+
+if [ -f terraform-pre-build ]; then
+    echo Running terraform-pre-build
+    ./terraform-pre-build ${ENVIRONMENT}
+fi
+
+if [ -f terraform.tfvars ]; then
+    TERRAFORM_EXTRA_ARGS="-var-file=../terraform.tfvars"
+else
+    TERRAFORM_EXTRA_ARGS=""
+fi
+TERRAFORM_EXTRA_ARGS="$TERRAFORM_EXTRA_ARGS -var tag=${TAG}"
+
+if [ -n "$TARGETS" ]; then
+    if [ "$COMMAND" = "plan" ]; then
+        TARGETS="-target ${TARGETS//,/ -target }"
+        TERRAFORM_EXTRA_ARGS="$TERRAFORM_EXTRA_ARGS $TARGETS -out=../custom.plan"
+    elif [ "$COMMAND" = "apply" ]; then
+        if [ -f custom.plan ]; then
+            TERRAFORM_EXTRA_ARGS="$TERRAFORM_AUTO_APPROVE ../custom.plan"
+        else
+            echo "No custom plan found for resource targeting."
+            exit 1
+        fi
+    fi
+else
+    TERRAFORM_EXTRA_ARGS="$TERRAFORM_EXTRA_ARGS $TERRAFORM_AUTO_APPROVE"
+fi
+
+cd ${ENVIRONMENT}
+terraform-11-13 init -get=true -get-plugins=true -upgrade=true -input=false
+terraform-11-13 get -update=true
+terraform-11-13 ${COMMAND} $TERRAFORM_EXTRA_ARGS
