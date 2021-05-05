@@ -5,12 +5,12 @@
 
 variable "name" {
   description = "Name to be used on all the resources as identifier"
-  default = ""
+  default = "load-test"
 }
 
 variable "billing" {
   description = "Name used for Billing tag on all resources"
-  default = ""
+  default = "load-test"
 }
 
 variable "cidr" {

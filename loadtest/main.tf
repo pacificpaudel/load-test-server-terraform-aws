@@ -15,19 +15,19 @@ provider "aws" {
 
 module "production_vpc" {
   source = "../tfmodules/vpc/"
-  name = "Otava"
-  billing = "Otava"
+  name = "loadtest"
+  billing = "loadtest"
 
   cidr = "10.7.0.0/16"
-  azs = ["eu-west-1a", "eu-west-1b", "eu-west-1c"]
-  public_subnets = ["10.7.1.0/24", "10.7.2.0/24", "10.7.3.0/24"]
-  private_subnets = ["10.7.4.0/24", "10.7.5.0/24", "10.7.6.0/24"]
+  azs = ["eu-west-1a"]
+  public_subnets = ["10.7.1.0/24"]
+  private_subnets = ["10.7.4.0/24"]
   create_nat = true
 }
 
 module "production_sg" {
   source = "../tfmodules/sg/"
-  billing = "Otava"
+  billing = "loadtest"
   vpc_id = "${module.production_vpc.vpc_id}"
 
   create_allow_http = true
